@@ -1,25 +1,29 @@
 package cn.tf.spring.cloud.feign.person.service.provider.web.controller;
 
-import cn.tf.spring.cloud.feign.api.domain.Person;
+
+import cn.tf.spring.cloud.feign.person.service.provider.entity.Person;
+import cn.tf.spring.cloud.feign.person.service.provider.repository.PersonRepository;
+import cn.tf.spring.cloud.feign.person.service.provider.service.PersonService;
 import com.netflix.hystrix.contrib.javanica.annotation.HystrixCommand;
 import com.netflix.hystrix.contrib.javanica.annotation.HystrixProperty;
+import org.springframework.beans.BeanUtils;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Map;
-import java.util.Random;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 @RestController
 public class PersonServiceProviderController {
 
-    private final Map<Long, Person> persons = new ConcurrentHashMap<>();
-
     private final static Random random = new Random();
+    @Autowired
+    private PersonRepository personRepository;
 
     /**
      * 保存
@@ -29,7 +33,12 @@ public class PersonServiceProviderController {
      */
     @PostMapping(value = "/person/save")
     public boolean savePerson(@RequestBody Person person) {
-        return persons.put(person.getId(), person) == null;
+
+        cn.tf.spring.cloud.feign.person.service.provider.entity.Person person1 =
+                new cn.tf.spring.cloud.feign.person.service.provider.entity.Person();
+        BeanUtils.copyProperties(person,person1);
+        personRepository.save(person1);
+        return true;
     }
 
 
@@ -43,15 +52,20 @@ public class PersonServiceProviderController {
     @HystrixCommand(fallbackMethod = "fallbackForFindAllPersons",
             commandProperties = {
                     @HystrixProperty(name = "execution.isolation.thread.timeoutInMilliseconds",
-                            value = "100")
+                            value = "400")
             }
     )
     public Collection<Person> findAllPersons() throws Exception {
-        // 如果随机时间 大于 100 ，那么触发容错
-        int value = random.nextInt(200);
+        // 如果随机时间 大于 400 ，那么触发容错
+        int value = random.nextInt(500);
         Thread.sleep(value);
         System.out.println("findAllPersons() costs " + value + " ms.");
-        return persons.values();
+        List<Person> personList = new ArrayList<>();
+        Iterable<Person> personIterable = personRepository.findAll();
+        personIterable.forEach(person -> {
+            personList.add(person);
+        });
+        return personList;
     }
 
     /**
@@ -63,5 +77,10 @@ public class PersonServiceProviderController {
         System.err.println("fallbackForFindAllPersons() is invoked!");
         return Collections.emptyList();
     }
+    @GetMapping("/person/list")
+    public Page<cn.tf.spring.cloud.feign.person.service.provider.entity.Person> list(Pageable pageable){
+        return personRepository.findAll(pageable);
+    }
+
 
 }
